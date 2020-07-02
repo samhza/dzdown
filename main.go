@@ -87,9 +87,25 @@ func downloadSong(c *deezer.Client, song deezer.Song, wg *sync.WaitGroup, sem ch
 	defer wg.Done()
 	sem <- 1
 	quality, err := deezer.ValidSongQuality(song, deezer.Quality(0))
+	if err != nil {
+		failed <- song
+		<-sem
+		return
+	}
 	url := deezer.SongDownloadURL(song, quality)
 	sng, err := c.Get(url)
+	if err != nil {
+		failed <- song
+		<-sem
+		return
+	}
+	defer sng.Body.Close()
 	file, err := os.Create(fmt.Sprintf("%s - %d %s.mp3", song.AlbumTitle, song.TrackNumber, song.Title))
+	if err != nil {
+		failed <- song
+		<-sem
+		return
+	}
 	defer file.Close()
 	if err != nil {
 		failed <- song
