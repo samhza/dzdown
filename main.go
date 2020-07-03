@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/erebid/go-deezer/deezer"
@@ -12,15 +15,28 @@ import (
 
 func main() {
 	var (
-		arl   string
-		maxDl int
+		arl     string
+		quality string
+		maxDl   int
 	)
 	flag.StringVar(&arl, "arl", "", "deezer arl for auth")
+	flag.StringVar(&quality, "q", "mp3-320", "deezer arl for auth")
 	flag.IntVar(&maxDl, "maxdl", 4, "max # of songs to download at a time")
 	flag.Parse()
 	if arl == "" {
 		println("no arl token provided")
 		os.Exit(1)
+	}
+	var preferredQuality deezer.Quality
+	switch strings.ToLower(quality) {
+	case "mp3-128":
+		preferredQuality = deezer.MP3128
+	case "mp3-320":
+		preferredQuality = deezer.MP3320
+	case "flac":
+		preferredQuality = deezer.FLAC
+	default:
+		preferredQuality = deezer.MP3128
 	}
 	c, err := deezer.NewClient(arl)
 	if err != nil {
@@ -65,60 +81,84 @@ func main() {
 			}
 		}
 	}
-	downloadSongs(songs, c, maxDl)
+	downloadSongs(songs, c, maxDl, preferredQuality)
 }
 
-func downloadSongs(songs []deezer.Song, c *deezer.Client, maxDl int) {
-	failed := make(chan deezer.Song, len(songs))
+func downloadSongs(songs []deezer.Song, c *deezer.Client, maxDl int, qual deezer.Quality) {
 	sem := make(chan int, maxDl)
 	var wg sync.WaitGroup
 	wg.Add(len(songs))
 	for _, song := range songs {
-		go downloadSong(c, song, &wg, sem, failed)
+		go downloadSong(c, song, qual, &wg, sem)
 	}
 	wg.Wait()
-	close(failed)
-	for failedsong := range failed {
-		println("song failed to download:", failedsong.Title)
-	}
 }
 
-func downloadSong(c *deezer.Client, song deezer.Song, wg *sync.WaitGroup, sem chan int, failed chan deezer.Song) {
+func downloadSong(c *deezer.Client, song deezer.Song, preferredQuality deezer.Quality, wg *sync.WaitGroup, sem chan int) {
 	defer wg.Done()
 	sem <- 1
-	quality, err := deezer.ValidSongQuality(song, deezer.Quality(0))
+	var body io.ReadCloser
+	quality := preferredQuality
+	for {
+		url := deezer.SongDownloadURL(song, quality)
+		sng, err := c.Get(url)
+		if err != nil {
+			println("error getting song", err)
+			<-sem
+			return
+		}
+		if sng.StatusCode == 200 {
+			body = sng.Body
+			defer body.Close()
+			break
+		} else {
+			sng.Body.Close()
+			qualities := c.AvailableQualities(song)
+			if len(qualities) == 0 {
+				println("song not available:", song.Title)
+				<-sem
+				return
+			}
+			for _, q := range qualities {
+				if q == preferredQuality {
+					quality = q
+					continue
+				}
+			}
+			quality = qualities[len(qualities)-1]
+		}
+	}
+	filepath := fmt.Sprintf("%s/%s/%d - %s.mp3", clean(song.ArtistName), clean(song.AlbumTitle), song.TrackNumber, clean(song.Title))
+	err := os.MkdirAll(path.Dir(filepath), 0755)
 	if err != nil {
-		failed <- song
+		println("failed to create directory for music", err)
 		<-sem
 		return
 	}
-	url := deezer.SongDownloadURL(song, quality)
-	sng, err := c.Get(url)
+	file, err := os.Create(filepath)
 	if err != nil {
-		failed <- song
+		println("failed to create file for song", err)
 		<-sem
 		return
 	}
-	defer sng.Body.Close()
-	file, err := os.Create(fmt.Sprintf("%s - %d %s.mp3", song.AlbumTitle, song.TrackNumber, song.Title))
+	reader, err := deezer.NewEncryptedSongReader(body, song.ID)
 	if err != nil {
-		failed <- song
+		println("failed to create encrypted reader for song", err)
 		<-sem
 		return
 	}
-	defer file.Close()
+	_, err = io.Copy(file, reader)
 	if err != nil {
-		failed <- song
+		println("failed to download song", err)
 		<-sem
 		return
 	}
-	reader, err := deezer.NewEncryptedSongReader(sng.Body, song)
-	if err != nil {
-		failed <- song
-		<-sem
-		return
-	}
-	io.Copy(file, reader)
 	println("downloaded", song.Title)
 	<-sem
+}
+
+func clean(name string) (cleaned string) {
+	cleaned = strings.Replace(name, string(filepath.Separator), "", -1)
+	cleaned = strings.Replace(cleaned, string(filepath.ListSeparator), "", -1)
+	return
 }
