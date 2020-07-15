@@ -84,7 +84,8 @@ func main() {
 	downloadSongs(songs, c, maxDl, preferredQuality)
 }
 
-func downloadSongs(songs []deezer.Song, c *deezer.Client, maxDl int, qual deezer.Quality) {
+func downloadSongs(songs []deezer.Song, c *deezer.Client,
+	maxDl int, qual deezer.Quality) {
 	sem := make(chan int, maxDl)
 	var wg sync.WaitGroup
 	wg.Add(len(songs))
@@ -94,7 +95,9 @@ func downloadSongs(songs []deezer.Song, c *deezer.Client, maxDl int, qual deezer
 	wg.Wait()
 }
 
-func downloadSong(c *deezer.Client, song deezer.Song, preferredQuality deezer.Quality, wg *sync.WaitGroup, sem chan int) {
+func downloadSong(c *deezer.Client, song deezer.Song,
+	preferredQuality deezer.Quality, wg *sync.WaitGroup, sem chan int) {
+
 	defer wg.Done()
 	sem <- 1
 	var body io.ReadCloser
@@ -128,7 +131,13 @@ func downloadSong(c *deezer.Client, song deezer.Song, preferredQuality deezer.Qu
 			quality = qualities[len(qualities)-1]
 		}
 	}
-	filepath := fmt.Sprintf("%s/%s/%d - %s.mp3", clean(song.ArtistName), clean(song.AlbumTitle), song.TrackNumber, clean(song.Title))
+	filepath := fmt.Sprintf(
+		"%s/%s/%d - %s.mp3",
+		clean(song.ArtistName),
+		clean(song.AlbumTitle),
+		song.TrackNumber,
+		clean(song.Title),
+	)
 	err := os.MkdirAll(path.Dir(filepath), 0755)
 	if err != nil {
 		println("failed to create directory for music", err)
