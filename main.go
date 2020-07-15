@@ -36,7 +36,7 @@ func main() {
 	case "flac":
 		preferredQuality = deezer.FLAC
 	default:
-		preferredQuality = deezer.MP3128
+		preferredQuality = deezer.MP3320
 	}
 	c, err := deezer.NewClient(arl)
 	if err != nil {
