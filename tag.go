@@ -40,6 +40,11 @@ func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
 	if err != nil {
 		return err
 	}
+
+	// The first metadata block is always the STREAMINFO metadata block which is
+	// required. Any other blocks Deezer gives us are unneeded.
+	f.Meta = f.Meta[:1]
+
 	tag := flacvorbis.New()
 	tag.Add(flacvorbis.FIELD_TITLE, s.Title)
 	tag.Add(flacvorbis.FIELD_ARTIST, s.ArtistName)
