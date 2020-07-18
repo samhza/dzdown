@@ -44,7 +44,7 @@ func main() {
 	}
 	var songs []deezer.Song
 	for _, link := range flag.Args() {
-		ctype, id := deezer.ParseLink(link)
+		ctype, id := deezer.ParseURL(link)
 		if ctype == "" {
 			log.Println("Invalid link:", link)
 			continue
@@ -151,14 +151,16 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 		<-sem
 		return
 	}
-	if deezer.FLAC != quality {
-		tagMP3(c, file, song)
-	}
 	reader, err := deezer.NewEncryptedSongReader(body, song.ID)
 	if err != nil {
 		log.Println("failed to create encrypted reader for song", err)
 		<-sem
 		return
+	}
+	if deezer.FLAC == quality {
+		tagFLAC(c, reader, file, song)
+	} else {
+		tagMP3(c, file, song)
 	}
 	_, err = io.Copy(file, reader)
 	if err != nil {
@@ -166,7 +168,7 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 		<-sem
 		return
 	}
-	fmt.Println(deezer.Link(deezer.ContentSong, song.ID))
+	fmt.Println(deezer.URL(deezer.ContentSong, song.ID))
 	<-sem
 }
 
