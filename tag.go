@@ -12,6 +12,7 @@ import (
 	"github.com/go-flac/go-flac"
 )
 
+// tagMP3 writes ID3 tags to a writer given a song.
 func tagMP3(c *deezer.Client, w io.Writer, s deezer.Song) error {
 	tag := id3v2.NewEmptyTag()
 	tag.SetArtist(s.ArtistName)
@@ -35,6 +36,8 @@ func tagMP3(c *deezer.Client, w io.Writer, s deezer.Song) error {
 	return err
 }
 
+// tagFLAC, given a song, writes FLAC (vorbis) metadata blocks to a writer. The
+// reader is needed so that the STREAMINFO metadata block can be read.
 func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
 	f, err := flac.ParseMetadata(r)
 	if err != nil {
@@ -55,7 +58,8 @@ func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
 	if err != nil {
 		return err
 	}
-	picture, err := flacpicture.NewFromImageData(flacpicture.PictureTypeFrontCover, "Front cover", cover, "image/jpeg")
+	picture, err := flacpicture.NewFromImageData(
+		flacpicture.PictureTypeFrontCover, "Front cover", cover, "image/jpeg")
 	picturemeta := picture.Marshal()
 
 	f.Meta = append(f.Meta, &tagmeta, &picturemeta)
