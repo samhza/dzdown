@@ -6,10 +6,10 @@ import (
 	"io/ioutil"
 
 	"github.com/bogem/id3v2"
-	"github.com/erebid/go-deezer/deezer"
 	"github.com/go-flac/flacpicture"
 	"github.com/go-flac/flacvorbis"
 	"github.com/go-flac/go-flac"
+	"github.com/godeezer/lib/deezer"
 )
 
 // tagMP3 writes ID3 tags to a writer given a song.

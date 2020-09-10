@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/erebid/go-deezer/deezer"
+	"github.com/godeezer/lib/deezer"
 )
 
 func main() {
@@ -102,7 +102,7 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 	var body io.ReadCloser
 	quality := preferredQuality
 	for {
-		url := deezer.SongDownloadURL(song, quality)
+		url := song.DownloadURL(quality)
 		sng, err := c.Get(url)
 		if err != nil {
 			log.Println("error getting song", err)
@@ -151,9 +151,9 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 		<-sem
 		return
 	}
-	reader, err := deezer.NewEncryptedSongReader(body, song.ID)
+	reader, err := deezer.NewDecryptSongReader(body, song.ID)
 	if err != nil {
-		log.Println("failed to create encrypted reader for song", err)
+		log.Println("failed to create decrypting reader for song", err)
 		<-sem
 		return
 	}
