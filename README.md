@@ -9,7 +9,7 @@ Remember that the artists and studios put a lot of work into making music - purc
 ## Usage:
 
 ```
-go get github.com/erebid/dzdown
+go get github.com/samhza/dzdown
 dzdown -arl your_arl_token_here <links>
 ```
 You can any number of links to songs, albums, or artists.
