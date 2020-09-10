@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"strconv"
 
 	"github.com/bogem/id3v2"
 	"github.com/go-flac/flacpicture"
@@ -18,6 +19,7 @@ func tagMP3(c *deezer.Client, w io.Writer, s deezer.Song) error {
 	tag.SetArtist(s.ArtistName)
 	tag.SetAlbum(s.AlbumTitle)
 	tag.SetTitle(s.Title)
+	tag.AddTextFrame(tag.CommonID("Track number/Position in set"), tag.DefaultEncoding(), strconv.Itoa(s.TrackNumber))
 
 	cover, err := cover(c, s.AlbumPicture)
 	if err != nil {
@@ -52,6 +54,8 @@ func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
 	tag.Add(flacvorbis.FIELD_TITLE, s.Title)
 	tag.Add(flacvorbis.FIELD_ARTIST, s.ArtistName)
 	tag.Add(flacvorbis.FIELD_ALBUM, s.AlbumTitle)
+	tag.Add(flacvorbis.FIELD_TRACKNUMBER, strconv.Itoa(s.TrackNumber))
+
 	tagmeta := tag.Marshal()
 
 	cover, err := cover(c, s.AlbumPicture)
