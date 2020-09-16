@@ -136,6 +136,12 @@ func (dz *dzdown) downloadSongs(songs []deezer.Song) {
 }
 
 func (dz *dzdown) downloadSong(song deezer.Song) {
+	filepath := songFilepath(song, dz.preferredQuality)
+	_, err := os.Stat(filepath)
+	if !os.IsNotExist(err) {
+		fmt.Println("file already exists, skipping download:", filepath)
+		return
+	}
 	var body io.ReadCloser
 	quality := dz.preferredQuality
 	for {
@@ -163,23 +169,18 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 				}
 			}
 			quality = qualities[len(qualities)-1]
+			filepath = songFilepath(song, quality)
 		}
 	}
-	filepath := fmt.Sprintf(
-		"%s/%s/%d - %s.%s",
-		clean(song.ArtistName),
-		clean(song.AlbumTitle),
-		song.TrackNumber,
-		clean(song.Title),
-		ext(quality),
-	)
-	err := os.MkdirAll(path.Dir(filepath), 0755)
+
+	err = os.MkdirAll(path.Dir(filepath), 0755)
 	if err != nil {
 		log.Println("failed to create directory for music", err)
 		return
 	}
 	file, err := os.Create(filepath)
 	defer file.Close()
+
 	if err != nil {
 		log.Println("failed to create file for song", err)
 		return
@@ -199,13 +200,24 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 		log.Println("failed to download song", err)
 		return
 	}
-	fmt.Println(deezer.URL(deezer.ContentSong, song.ID))
+	fmt.Println("downloaded", filepath)
 }
 
 func clean(name string) (cleaned string) {
 	cleaned = strings.Replace(name, string(filepath.Separator), "", -1)
 	cleaned = strings.Replace(cleaned, string(filepath.ListSeparator), "", -1)
 	return
+}
+
+func songFilepath(song deezer.Song, quality deezer.Quality) string {
+	return fmt.Sprintf("%s/%s/%d - %s.%s",
+		clean(song.ArtistName),
+		clean(song.AlbumTitle),
+		song.TrackNumber,
+		clean(song.Title),
+		ext(quality),
+	)
+
 }
 
 func ext(q deezer.Quality) string {
