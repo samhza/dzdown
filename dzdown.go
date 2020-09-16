@@ -15,31 +15,42 @@ import (
 	"golang.org/x/sync/semaphore"
 )
 
+type dzdown struct {
+	*deezer.Client
+	preferredQuality deezer.Quality
+	preferEdited     bool
+	artSize          int
+	maxDl            int
+}
+
 func main() {
 	var (
 		arl     string
 		quality string
-		maxDl   int
 	)
+	dz := &dzdown{}
 	flag.StringVar(&arl, "arl", "", "deezer arl for auth")
 	flag.StringVar(&quality, "q", "mp3-320", "deezer arl for auth")
-	flag.IntVar(&maxDl, "maxdl", 4, "max # of songs to download at a time")
+	flag.IntVar(&dz.maxDl, "dl-limit", 4, "max # of songs to download at a time")
+	flag.IntVar(&dz.artSize, "art-size", 400, "width/height of album art to download (max = 800)")
+	flag.BoolVar(&dz.preferEdited, "prefer-edited", false,
+		"whether to prefer edited/clean versions of albums over their unedited/explicit counterparts")
 	flag.Parse()
 	if arl == "" {
 		log.Fatalln("no arl token provided")
 	}
-	var preferredQuality deezer.Quality
 	switch strings.ToLower(quality) {
 	case "mp3-128":
-		preferredQuality = deezer.MP3128
+		dz.preferredQuality = deezer.MP3128
 	case "mp3-320":
-		preferredQuality = deezer.MP3320
+		dz.preferredQuality = deezer.MP3320
 	case "flac":
-		preferredQuality = deezer.FLAC
+		dz.preferredQuality = deezer.FLAC
 	default:
-		preferredQuality = deezer.MP3320
+		dz.preferredQuality = deezer.MP3320
 	}
-	c, err := deezer.NewClient(arl)
+	var err error
+	dz.Client, err = deezer.NewClient(arl)
 	if err != nil {
 		log.Fatalln("error creating client:", err.Error())
 	}
@@ -52,27 +63,51 @@ func main() {
 		}
 		switch ctype {
 		case deezer.ContentSong:
-			song, err := c.Song(id)
+			song, err := dz.Song(id)
 			if err != nil {
 				log.Println("failed to get song", err.Error())
 				continue
 			}
 			songs = append(songs, *song)
 		case deezer.ContentAlbum:
-			albsongs, err := c.SongsByAlbum(id, -1)
+			albsongs, err := dz.SongsByAlbum(id, -1)
 			if err != nil {
 				log.Println("failed to get album", err.Error())
 				continue
 			}
 			songs = append(songs, albsongs...)
 		case deezer.ContentArtist:
-			albums, err := c.AlbumsByArtist(id)
+			albums, err := dz.AlbumsByArtist(id)
 			if err != nil {
 				log.Println("failed to get artist", err.Error())
 				continue
 			}
+
+			// There may be multiple "albums" with the same name fetched, some being
+			// explicit and others being edited.
+			var uniqueAlbums []deezer.Album
 			for _, album := range albums {
-				albsongs, err := c.SongsByAlbum(album.ID, -1)
+				collisionIndex := -1
+				for j, a := range uniqueAlbums {
+					if album.Title == a.Title {
+						collisionIndex = j
+					}
+				}
+				if collisionIndex == -1 {
+					uniqueAlbums = append(uniqueAlbums, album)
+				} else {
+					collisionStatus := uniqueAlbums[collisionIndex].ExplicitContent.LyricsStatus
+					collisionIsEdited := collisionStatus == 3
+					if dz.preferEdited != collisionIsEdited {
+						uniqueAlbums[collisionIndex] = album
+					}
+				}
+			}
+			println(len(albums))
+			println("filtered", len(uniqueAlbums))
+
+			for _, album := range uniqueAlbums {
+				albsongs, err := dz.SongsByAlbum(album.ID, -1)
 				if err != nil {
 					log.Println("failed to get album", err.Error())
 					continue
@@ -81,32 +116,31 @@ func main() {
 			}
 		}
 	}
-	downloadSongs(songs, c, maxDl, preferredQuality)
+	dz.downloadSongs(songs)
 }
 
-func downloadSongs(songs []deezer.Song, c *deezer.Client,
-	maxDl int, qual deezer.Quality) {
-	sem := semaphore.NewWeighted(int64(maxDl))
+func (dz *dzdown) downloadSongs(songs []deezer.Song) {
+	sem := semaphore.NewWeighted(int64(dz.maxDl))
 	for _, song := range songs {
 		if err := sem.Acquire(context.Background(), 1); err != nil {
 			log.Printf("failed to acquire semaphore: %v\n", err)
 		}
-		go downloadSong(c, song, qual, sem)
+		go func(song deezer.Song) {
+			defer sem.Release(1)
+			dz.downloadSong(song)
+		}(song)
 	}
-	if err := sem.Acquire(context.Background(), int64(maxDl)); err != nil {
+	if err := sem.Acquire(context.Background(), int64(dz.maxDl)); err != nil {
 		log.Printf("failed to acquire semaphore: %v\n", err)
 	}
 }
 
-func downloadSong(c *deezer.Client, song deezer.Song,
-	preferredQuality deezer.Quality, sem *semaphore.Weighted) {
-	defer sem.Release(1)
-
+func (dz *dzdown) downloadSong(song deezer.Song) {
 	var body io.ReadCloser
-	quality := preferredQuality
+	quality := dz.preferredQuality
 	for {
 		url := song.DownloadURL(quality)
-		sng, err := c.Get(url)
+		sng, err := dz.Get(url)
 		if err != nil {
 			log.Println("error getting song", err)
 			return
@@ -117,13 +151,13 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 			break
 		} else {
 			sng.Body.Close()
-			qualities := c.AvailableQualities(song)
+			qualities := dz.AvailableQualities(song)
 			if len(qualities) == 0 {
 				log.Println("song not available:", song.Title)
 				return
 			}
 			for _, q := range qualities {
-				if q == preferredQuality {
+				if q == dz.preferredQuality {
 					quality = q
 					continue
 				}
@@ -156,9 +190,9 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 		return
 	}
 	if deezer.FLAC == quality {
-		tagFLAC(c, reader, file, song)
+		tagFLAC(dz.Client, reader, file, song, dz.artSize)
 	} else {
-		tagMP3(c, file, song)
+		tagMP3(dz.Client, file, song, dz.artSize)
 	}
 	_, err = io.Copy(file, reader)
 	if err != nil {

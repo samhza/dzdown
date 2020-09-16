@@ -14,14 +14,14 @@ import (
 )
 
 // tagMP3 writes ID3 tags to a writer given a song.
-func tagMP3(c *deezer.Client, w io.Writer, s deezer.Song) error {
+func tagMP3(c *deezer.Client, w io.Writer, s deezer.Song, artSize int) error {
 	tag := id3v2.NewEmptyTag()
 	tag.SetArtist(s.ArtistName)
 	tag.SetAlbum(s.AlbumTitle)
 	tag.SetTitle(s.Title)
 	tag.AddTextFrame(tag.CommonID("Track number/Position in set"), tag.DefaultEncoding(), strconv.Itoa(s.TrackNumber))
 
-	cover, err := cover(c, s.AlbumPicture)
+	cover, err := cover(c, s.AlbumPicture, artSize)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func tagMP3(c *deezer.Client, w io.Writer, s deezer.Song) error {
 
 // tagFLAC, given a song, writes FLAC (vorbis) metadata blocks to a writer. The
 // reader is needed so that the STREAMINFO metadata block can be read.
-func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
+func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song, artSize int) error {
 	f, err := flac.ParseMetadata(r)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
 
 	tagmeta := tag.Marshal()
 
-	cover, err := cover(c, s.AlbumPicture)
+	cover, err := cover(c, s.AlbumPicture, artSize)
 	if err != nil {
 		return err
 	}
@@ -79,8 +79,8 @@ func tagFLAC(c *deezer.Client, r io.Reader, w io.Writer, s deezer.Song) error {
 	return err
 }
 
-func cover(c *deezer.Client, albpic string) ([]byte, error) {
-	coverurl := fmt.Sprintf("https://e-cdns-images.dzcdn.net/images/cover/%s/800x800-000000-80-0-0.jpg", albpic)
+func cover(c *deezer.Client, albpic string, size int) ([]byte, error) {
+	coverurl := fmt.Sprintf("https://e-cdns-images.dzcdn.net/images/cover/%s/%dx%[2]d-000000-80-0-0.jpg", albpic, size)
 	resp, err := c.Get(coverurl)
 	if err != nil {
 		return nil, err
