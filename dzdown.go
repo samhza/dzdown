@@ -47,7 +47,7 @@ func main() {
 	case "flac":
 		dz.preferredQuality = deezer.FLAC
 	default:
-		dz.preferredQuality = deezer.MP3320
+		log.Fatalln("unknown quality:", strings.ToLower(quality))
 	}
 	var err error
 	dz.Client, err = deezer.NewClient(arl)
