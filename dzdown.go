@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -9,9 +10,9 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/godeezer/lib/deezer"
+	"golang.org/x/sync/semaphore"
 )
 
 func main() {
@@ -85,20 +86,22 @@ func main() {
 
 func downloadSongs(songs []deezer.Song, c *deezer.Client,
 	maxDl int, qual deezer.Quality) {
-	sem := make(chan int, maxDl)
-	var wg sync.WaitGroup
-	wg.Add(len(songs))
+	sem := semaphore.NewWeighted(int64(maxDl))
 	for _, song := range songs {
-		go downloadSong(c, song, qual, &wg, sem)
+		if err := sem.Acquire(context.Background(), 1); err != nil {
+			log.Printf("failed to acquire semaphore: %v\n", err)
+		}
+		go downloadSong(c, song, qual, sem)
 	}
-	wg.Wait()
+	if err := sem.Acquire(context.Background(), int64(maxDl)); err != nil {
+		log.Printf("failed to acquire semaphore: %v\n", err)
+	}
 }
 
 func downloadSong(c *deezer.Client, song deezer.Song,
-	preferredQuality deezer.Quality, wg *sync.WaitGroup, sem chan int) {
+	preferredQuality deezer.Quality, sem *semaphore.Weighted) {
+	defer sem.Release(1)
 
-	defer wg.Done()
-	sem <- 1
 	var body io.ReadCloser
 	quality := preferredQuality
 	for {
@@ -106,7 +109,6 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 		sng, err := c.Get(url)
 		if err != nil {
 			log.Println("error getting song", err)
-			<-sem
 			return
 		}
 		if sng.StatusCode == 200 {
@@ -118,7 +120,6 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 			qualities := c.AvailableQualities(song)
 			if len(qualities) == 0 {
 				log.Println("song not available:", song.Title)
-				<-sem
 				return
 			}
 			for _, q := range qualities {
@@ -141,20 +142,17 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 	err := os.MkdirAll(path.Dir(filepath), 0755)
 	if err != nil {
 		log.Println("failed to create directory for music", err)
-		<-sem
 		return
 	}
 	file, err := os.Create(filepath)
 	defer file.Close()
 	if err != nil {
 		log.Println("failed to create file for song", err)
-		<-sem
 		return
 	}
 	reader, err := deezer.NewDecryptSongReader(body, song.ID)
 	if err != nil {
 		log.Println("failed to create decrypting reader for song", err)
-		<-sem
 		return
 	}
 	if deezer.FLAC == quality {
@@ -165,11 +163,9 @@ func downloadSong(c *deezer.Client, song deezer.Song,
 	_, err = io.Copy(file, reader)
 	if err != nil {
 		log.Println("failed to download song", err)
-		<-sem
 		return
 	}
 	fmt.Println(deezer.URL(deezer.ContentSong, song.ID))
-	<-sem
 }
 
 func clean(name string) (cleaned string) {
