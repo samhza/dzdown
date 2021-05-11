@@ -162,12 +162,6 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 				log.Println("song not available:", song.Title)
 				return
 			}
-			for _, q := range qualities {
-				if q == dz.preferredQuality {
-					quality = q
-					continue
-				}
-			}
 			quality = qualities[len(qualities)-1]
 			filepath = songFilepath(song, quality)
 		}
@@ -217,7 +211,6 @@ func songFilepath(song deezer.Song, quality deezer.Quality) string {
 		clean(song.Title),
 		ext(quality),
 	)
-
 }
 
 func ext(q deezer.Quality) string {
