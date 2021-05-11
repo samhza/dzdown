@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -32,7 +33,7 @@ func main() {
 	flag.StringVar(&arl, "arl", "", "deezer arl for auth")
 	flag.StringVar(&quality, "q", "mp3-320", "deezer arl for auth")
 	flag.IntVar(&dz.maxDl, "dl-limit", 4, "max # of songs to download at a time")
-	flag.IntVar(&dz.artSize, "art-size", 400, "width/height of album art to download (max = 800)")
+	flag.IntVar(&dz.artSize, "art-size", 800, "width/height of album art to download (max = 800)")
 	flag.BoolVar(&dz.preferEdited, "prefer-edited", false,
 		"whether to prefer edited/clean versions of albums over their unedited/explicit counterparts")
 	flag.Parse()
@@ -142,6 +143,16 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 		fmt.Println("file already exists, skipping download:", filepath)
 		return
 	}
+	err = os.MkdirAll(path.Dir(filepath), 0755)
+	if err != nil {
+		log.Println("failed to create directory for music", err)
+		return
+	}
+	err = dz.downloadCover(song)
+	if err != nil {
+		log.Println("error downloading album art:", err)
+		return
+	}
 	var body io.ReadCloser
 	quality := dz.preferredQuality
 	for {
@@ -167,11 +178,6 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 		}
 	}
 
-	err = os.MkdirAll(path.Dir(filepath), 0755)
-	if err != nil {
-		log.Println("failed to create directory for music", err)
-		return
-	}
 	file, err := os.Create(filepath)
 	if err != nil {
 		log.Println("failed to create file for song", err)
@@ -185,9 +191,9 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 		return
 	}
 	if deezer.FLAC == quality {
-		tagFLAC(dz.Client, reader, file, song, dz.artSize)
+		tagFLAC(dz.Client, reader, file, song)
 	} else {
-		tagMP3(dz.Client, file, song, dz.artSize)
+		tagMP3(dz.Client, file, song)
 	}
 	_, err = io.Copy(file, reader)
 	if err != nil {
@@ -213,9 +219,36 @@ func songFilepath(song deezer.Song, quality deezer.Quality) string {
 	)
 }
 
+func artFilepath(song deezer.Song) string {
+	return fmt.Sprintf("%s/%s/cover.jpg",
+		clean(song.ArtistName),
+		clean(song.AlbumTitle),
+	)
+}
+
 func ext(q deezer.Quality) string {
 	if q == deezer.FLAC {
 		return "flac"
 	}
 	return "mp3"
+}
+
+func (dz *dzdown) downloadCover(song deezer.Song) error {
+	f, err := os.OpenFile(artFilepath(song), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0666)
+	if errors.Is(err, os.ErrExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	defer f.Close()
+	coverurl := fmt.Sprintf(
+		"https://e-cdns-images.dzcdn.net/images/cover/%s/%dx%[2]d-000000-80-0-0.jpg",
+		song.AlbumPicture, dz.artSize)
+	resp, err := dz.Get(coverurl)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, err = io.Copy(f, resp.Body)
+	return err
 }

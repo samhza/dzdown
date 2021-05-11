@@ -1,4 +1,4 @@
-module github.com/samhza/dzdown
+module go.samhza.com/dzdown
 
 go 1.14
 
