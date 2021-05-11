@@ -179,12 +179,12 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 		return
 	}
 	file, err := os.Create(filepath)
-	defer file.Close()
-
 	if err != nil {
 		log.Println("failed to create file for song", err)
 		return
 	}
+	defer file.Close()
+
 	reader, err := deezer.NewDecryptSongReader(body, song.ID)
 	if err != nil {
 		log.Println("failed to create decrypting reader for song", err)
