@@ -50,11 +50,7 @@ func main() {
 	default:
 		log.Fatalln("unknown quality:", strings.ToLower(quality))
 	}
-	var err error
-	dz.Client, err = deezer.NewClient(arl)
-	if err != nil {
-		log.Fatalln("error creating client:", err.Error())
-	}
+	dz.Client = deezer.NewClient(arl)
 	var songs []deezer.Song
 	for _, link := range flag.Args() {
 		ctype, id := deezer.ParseURL(link)
@@ -185,7 +181,7 @@ func (dz *dzdown) downloadSong(song deezer.Song) {
 	}
 	defer file.Close()
 
-	reader, err := deezer.NewDecryptSongReader(body, song.ID)
+	reader, err := deezer.NewDecryptingReader(body, song.ID)
 	if err != nil {
 		log.Println("failed to create decrypting reader for song", err)
 		return
