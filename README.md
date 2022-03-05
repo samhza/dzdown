@@ -9,7 +9,7 @@ Remember that the artists and studios put a lot of work into making music - purc
 ## Usage:
 
 ```
-go get go.samhza.com/dzdown
+go install samhza.com/dzdown@latest
 dzdown -arl your_arl_token_here <links>
 ```
 You can any number of links to songs, albums, or artists.
